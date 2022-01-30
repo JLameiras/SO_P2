@@ -45,14 +45,14 @@ int main(int argc, char **argv) {
         if (n == 0) break;
 
         if(buf[0] == '1'){
-            n = read (fd_serv, buf, sizeof(char));
+            read (fd_serv, buf, sizeof(char));
             session_id++;
             strcpy(client_pipes[session_id], buf);
         }
 
        if(buf[0] == '2') {
             int session = -1;
-            n = read(fd_serv, session, sizeof(int));
+            read(fd_serv, &session, sizeof(int));
             int client_pipe = fd_client[session];
             fd_client[session] = -1;
             close(client_pipe);
