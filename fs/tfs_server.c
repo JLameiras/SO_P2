@@ -20,8 +20,9 @@ int main(int argc, char **argv) {
     /*To do*/
 
     char *client_pipes[S];
+    int fd_serv;
+    int fd_client[S];
     int session_id = -1;
-    int fd_serv, fd_client[S];
     int buf[BUFSIZ];
     int n;
 
@@ -41,32 +42,24 @@ int main(int argc, char **argv) {
 
     while(1) {
         n = read (fd_serv, buf, sizeof(char));
-        if (n == 0) continue;
+        if (n == 0) break;
 
         if(buf[0] == '1'){
-            n = read (fd_serv, buf, (40 * sizeof(char)));
+            n = read (fd_serv, buf, sizeof(char));
             session_id++;
-            strcpy(client_pipes[session_id], buf,(40 * sizeof(char)));
-
-
+            strcpy(client_pipes[session_id], buf);
         }
-        else if(buf[0] == '2') {
+
+       if(buf[0] == '2') {
             int session = -1;
             n = read(fd_serv, session, sizeof(int));
             int client_pipe = fd_client[session];
             fd_client[session] = -1;
             close(client_pipe);
         }
-
-        //Handle requests...
-        //session_id is created by client when initializing a new session
-        //Pedido de sessão
-        //session_id++;
     }
 
     close(fd_serv);
-    close(fd_client);
     unlink(server_pipe);
-    unlink(client_pipes[session_id]);
     return 0;
 }
