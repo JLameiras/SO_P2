@@ -21,9 +21,12 @@ int main(int argc, char **argv) {
 
     char *client_pipes[S];
     int session_id = -1;
-    int fd_serv, fd_client;
+    int fd_serv, fd_client[S];
     int buf[BUFSIZ];
     int n;
+
+    for(int i = 0; i < S; i++)
+        fd_client[i] = -1;
 
     if(!valid_pathname(server_pipe)){
         printf("Invalid pipename. \n");
@@ -43,21 +46,22 @@ int main(int argc, char **argv) {
         if(buf[0] == '1'){
             n = read (fd_serv, buf, (40 * sizeof(char)));
             session_id++;
-            strcpy(client_pipes[session_id], buf,(40 * sizeof(char));
+            strcpy(client_pipes[session_id], buf,(40 * sizeof(char)));
 
 
         }
-
+        else if(buf[0] == '2') {
+            int session = -1;
+            n = read(fd_serv, session, sizeof(int));
+            int client_pipe = fd_client[session];
+            fd_client[session] = -1;
+            close(client_pipe);
+        }
 
         //Handle requests...
         //session_id is created by client when initializing a new session
         //Pedido de sessão
         //session_id++;
-
-        //Named pipe used by the server to respond to the client's requests
-        if ((fd_client = open(client_pipes[session_id], O_WRONLY)) < 0) return 1;
-        n = write (fd_client, buf, BUFSIZ);
-        if (n == 0) break;
     }
 
     close(fd_serv);
