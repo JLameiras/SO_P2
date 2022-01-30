@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     char *pipename = argv[1];
     printf("Starting TecnicoFS server with pipe called %s\n", pipename);
 
-    /* TO DO */
+    /* criar fifo */
 
     return 0;
 }

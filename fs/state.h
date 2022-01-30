@@ -39,6 +39,9 @@ typedef struct {
 
 #define MAX_DIR_ENTRIES (BLOCK_SIZE / sizeof(dir_entry_t))
 
+int get_open_file_entries();
+void edit_open_file_entries();
+
 void state_init();
 void state_destroy();
 

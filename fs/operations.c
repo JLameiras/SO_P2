@@ -6,9 +6,14 @@
 #include <string.h>
 
 static pthread_mutex_t single_global_lock;
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+
+bool open_tfs_closed;
 
 int tfs_init() {
     state_init();
+    edit_open_file_entries(-get_open_file_entries());
+    open_tfs_closed = false;
 
     if (pthread_mutex_init(&single_global_lock, 0) != 0)
         return -1;
@@ -35,7 +40,20 @@ static bool valid_pathname(char const *name) {
 }
 
 int tfs_destroy_after_all_closed() {
-    /* TO DO: implement this */
+    open_tfs_closed = true;
+
+    if (pthread_mutex_lock(&single_global_lock) != 0)
+        return -1;
+
+    while(get_open_file_entries() != 0){
+        pthread_cond_wait(&cond, &single_global_lock);
+    }
+
+    tfs_destroy();
+
+    if (pthread_mutex_unlock(&single_global_lock) != 0)
+        return -1;
+
     return 0;
 }
 
@@ -64,6 +82,7 @@ static int _tfs_open_unsynchronized(char const *name, int flags) {
     size_t offset;
 
     inum = _tfs_lookup_unsynchronized(name);
+
     if (inum >= 0) {
         /* The file already exists */
         inode_t *inode = inode_get(inum);
@@ -113,6 +132,8 @@ static int _tfs_open_unsynchronized(char const *name, int flags) {
 }
 
 int tfs_open(char const *name, int flags) {
+    if(open_tfs_closed)
+        return -1;
     if (pthread_mutex_lock(&single_global_lock) != 0)
         return -1;
     int ret = _tfs_open_unsynchronized(name, flags);
@@ -126,6 +147,10 @@ int tfs_close(int fhandle) {
     if (pthread_mutex_lock(&single_global_lock) != 0)
         return -1;
     int r = remove_from_open_file_table(fhandle);
+    if(r == 0){
+        if(get_open_file_entries() == 0)
+            pthread_cond_signal(&cond);
+    }
     if (pthread_mutex_unlock(&single_global_lock) != 0)
         return -1;
 
