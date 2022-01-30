@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
     int fd_serv;
     int fd_clients[S];
     int session_id = -1;
-    int buf[BUFSIZ];
+    char buf[BUFSIZ];
     int n;
 
     for(int i = 0; i < S; i++)
@@ -64,74 +64,62 @@ int main(int argc, char **argv) {
                 buf[i] = '\0';
             strcpy(client_pipes[session_id], buf);
             if((fd_clients[session_id] = open(client_pipes[session_id], O_WRONLY)) < 0) return -1;
-            write(fd_clients[session_id], session_id, sizeof(int));
+            n = write(fd_clients[session_id], &session_id, sizeof(int));
         }
 
-       if(buf[0] == '2') {
-            int session = -1;
-            read(fd_serv, &session, sizeof(int));
-            int client_pipe = fd_clients[session];
-            fd_clients[session] = -1;
+        if(buf[0] == '2') {
+            n = read(fd_serv, &session_id, sizeof(int));
+            int client_pipe = fd_clients[session_id];
+            free_client_id_pipe(client_pipes, fd_clients, session_id);
             close(client_pipe);
         }
 
         if(buf[0] == '3') {
             int flags;
-            read(fd_serv, &session_id, sizeof(int));
-            n = read(fd_serv, buf, (40 * sizeof(char)));
-            read(fd_serv, &flags, sizeof(int));
+            n = read(fd_serv, &session_id, sizeof(int));
+            n = read (fd_serv, buf, 40 * sizeof(char));
+            n = read(fd_serv, &flags, sizeof(int));
             n = tfs_open(buf, flags);
-            if(n < 0)
-                write(fd_client[session_id], -1, sizeof(int));
-            else
-                write(fd_client[session_id], 0, sizeof(int));
+            n = write(fd_clients[session_id], &n, sizeof(int));
         }
 
         if(buf[0] == '4') {
             int fhandle;
-            read(fd_serv, &session_id, sizeof(int));
-            read(fd_serv, &fhandle, sizeof(int));
+            n = read(fd_serv, &session_id, sizeof(int));
+            n = read(fd_serv, &fhandle, sizeof(int));
             n = tfs_close(fhandle);
-            if(n < 0)
-                write(fd_client[session_id], -1, sizeof(int));
-            else
-                write(fd_client[session_id], 0, sizeof(int));
+            n = write(fd_clients[session_id], &n, sizeof(int));
         }
 
         if(buf[0] == '5') {
             int fhandle;
             size_t len;
-            read(fd_serv, &session_id, sizeof(int));
-            read(fd_serv, &fhandle, sizeof(int));
-            read(fd_serv, &len, sizeof(size_t));
+            n = read(fd_serv, &session_id, sizeof(int));
+            n = read(fd_serv, &fhandle, sizeof(int));
+            n = read(fd_serv, &len, sizeof(size_t));
             char text[len];
             n = read (fd_serv, text, len * sizeof(char));
             n = tfs_write(fd_serv, text, n);
-            if(n < 0)
-                write(fd_client[session_id], -1, sizeof(int));
-            else
-                write(fd_client[session_id], 0, sizeof(int));
+            n =write(fd_clients[session_id], &n, sizeof(int));
         }
 
         if(buf[0] == '6'){
             int fhandle;
             size_t len;
-            read(fd_serv, &session_id, sizeof(int));
-            read(fd_serv, &fhandle, sizeof(int));
-            read(fd_serv, &len, sizeof(size_t));
+            n = read(fd_serv, &session_id, sizeof(int));
+            n = read(fd_serv, &fhandle, sizeof(int));
+            n = read(fd_serv, &len, sizeof(size_t));
             char text[len];
             n = tfs_read(fhandle, text, len);
-            if(n > 0)
-                write(fd_client[session_id], n, sizeof(int));
-                write(fd_client[session_id], text, (len * sizeof(char)));
-            else
-                write(fd_client[session_id], -1, sizeof(int));
+            fhandle = write(fd_clients[session_id], &n, sizeof(int));
+            if (n > 0)
+                n = write(fd_clients[session_id], text, (len * sizeof(char)));
         }
 
         if(buf[0] == '7'){
-            read(fd_serv, &session_id, sizeof(int));
+            n = read(fd_serv, &session_id, sizeof(int));
             n = tfs_destroy_after_all_closed();
-            write(fd_client[session_id], n, sizeof(int));
+            n = write(fd_clients[session_id], &n, sizeof(int));
         }
     }
 
