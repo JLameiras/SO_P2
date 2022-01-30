@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
     int fd_serv;
     int fd_client[S];
     int session_id = -1;
-    int buf[BUFSIZ];
+    char buf[BUFSIZ];
     int n;
 
     for(int i = 0; i < S; i++)
@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     if ((fd_serv = open(server_pipe, O_RDONLY)) < 0) return 1;
 
     while(1) {
-        n = read (fd_serv, buf, sizeof(char));
+        n = (int) read (fd_serv, buf, sizeof(char));
         if (n == 0) break;
 
         if(buf[0] == '1'){
@@ -51,11 +51,49 @@ int main(int argc, char **argv) {
         }
 
        if(buf[0] == '2') {
-            int session = -1;
-            read(fd_serv, &session, sizeof(int));
+            read(fd_serv, &session_id, sizeof(int));
             int client_pipe = fd_client[session];
-            fd_client[session] = -1;
+            fd_client[session_id] = -1;
+            write(client_pipe, "0", 1);
             close(client_pipe);
+        }
+
+        if(buf[0] == '3') {
+            int flags;
+            read(fd_serv, &session_id, sizeof(int));
+            n = read (fd_serv, buf, 40 * sizeof(char));
+            read(fd_serv, &flags, sizeof(int));
+            n = tfs_open(buf, flags);
+            if(n < 0)
+                write(fd_client[session_id], -1, sizeof(int));
+            else
+                write(fd_client[session_id], 0, sizeof(int));
+        }
+
+        if(buf[0] == '4') {
+            int fhandle;
+            read(fd_serv, &session_id, sizeof(int));
+            read(fd_serv, &fhandle, sizeof(int));
+            n = tfs_close(fhandle);
+            if(n < 0)
+                write(fd_client[session_id], -1, sizeof(int));
+            else
+                write(fd_client[session_id], 0, sizeof(int));
+        }
+
+        if(buf[0] == '5') {
+            int fhandle;
+            size_t len;
+            read(fd_serv, &session_id, sizeof(int));
+            read(fd_serv, &fhandle, sizeof(int));
+            read(fd_serv, &len, sizeof(size_t));
+            char text[len];
+            n = read (fd_serv, text, len * sizeof(char));
+            n =write(fd_serv, text, len);
+            if(n < 0)
+                write(fd_client[session_id], -1, sizeof(int));
+            else
+                write(fd_client[session_id], 0, sizeof(int));
         }
     }
 
