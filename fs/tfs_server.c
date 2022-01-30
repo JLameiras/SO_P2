@@ -1,5 +1,4 @@
 #include "operations.h"
-#include "operations.c"
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -41,11 +40,6 @@ int main(int argc, char **argv) {
 
     for(int i = 0; i < S; i++)
         fd_clients[i] = -1;
-
-    if(!valid_pathname(server_pipe)){
-        printf("Invalid pipename. \n");
-        return 1;
-    }
 
     unlink(server_pipe);
 
