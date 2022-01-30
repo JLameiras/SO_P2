@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
         if(buf[0] == '3') {
             int flags;
             read(fd_serv, &session_id, sizeof(int));
-            n = read (fd_serv, buf, 40 * sizeof(char));
+            n = read(fd_serv, buf, (40 * sizeof(char)));
             read(fd_serv, &flags, sizeof(int));
             n = tfs_open(buf, flags);
             if(n < 0)
@@ -106,7 +106,7 @@ int main(int argc, char **argv) {
             read(fd_serv, &len, sizeof(size_t));
             char text[len];
             n = read (fd_serv, text, len * sizeof(char));
-            n =write(fd_serv, text, len);
+            n = tfs_write(fd_serv, text, n);
             if(n < 0)
                 write(fd_client[session_id], -1, sizeof(int));
             else
@@ -114,7 +114,24 @@ int main(int argc, char **argv) {
         }
 
         if(buf[0] == '6'){
+            int fhandle;
+            size_t len;
+            read(fd_serv, &session_id, sizeof(int));
+            read(fd_serv, &fhandle, sizeof(int));
+            read(fd_serv, &len, sizeof(size_t));
+            char text[len];
+            n = tfs_read(fhandle, text, len);
+            if(n > 0)
+                write(fd_client[session_id], n, sizeof(int));
+                write(fd_client[session_id], text, (len * sizeof(char)));
+            else
+                write(fd_client[session_id], -1, sizeof(int));
+        }
 
+        if(buf[0] == '7'){
+            read(fd_serv, &session_id, sizeof(int));
+            n = tfs_destroy_after_all_closed();
+            write(fd_client[session_id], n, sizeof(int));
         }
     }
 
