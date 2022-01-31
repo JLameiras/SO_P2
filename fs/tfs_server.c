@@ -7,11 +7,9 @@
 #define S 20
 
 int minimum_available_session_id(int fd_clients[]){
-    for(int i = 0; i < S; i++){
-        if(fd_clients[i] == -1){
-            return i;
-        }
-    }
+    for(int i = 0; i < S; i++)
+        if(fd_clients[i] == -1) return i;
+    return S;
 }
 
 int free_client_id_pipe(char *client_pipes[S], int fd_clients[], int session_id){
@@ -36,11 +34,10 @@ int main(int argc, char **argv) {
     int fd_clients[S];
     int session_id = -1;
     char buf[BUFSIZ];
-    int n;
+    int m, n, i;
 
-    for(int i = 0; i < S; i++)
+    for(i = 0; i < S; i++)
         fd_clients[i] = -1;
-
     unlink(server_pipe);
 
     //Named pipe used by client processes' to send requests to the server
@@ -52,68 +49,69 @@ int main(int argc, char **argv) {
         if (n == 0) break;
 
         if(buf[0] == '1'){
-            int m = read(fd_serv, buf, (40 * sizeof(char)));
+            if(minimum_available_session_id(fd_clients) == S) break;
+            m = read(fd_serv, buf, (40 * sizeof(char)));
             session_id = minimum_available_session_id(fd_clients);
             for(int i = m; i < 40; i++)
                 buf[i] = '\0';
             strcpy(client_pipes[session_id], buf);
             if((fd_clients[session_id] = open(client_pipes[session_id], O_WRONLY)) < 0) return -1;
-            n = write(fd_clients[session_id], &session_id, sizeof(int));
+            write(fd_clients[session_id], &session_id, sizeof(int));
         }
 
         if(buf[0] == '2') {
             n = read(fd_serv, &session_id, sizeof(int));
-            int client_pipe = fd_clients[session_id];
             free_client_id_pipe(client_pipes, fd_clients, session_id);
-            close(client_pipe);
+            if(close(fd_clients[session_id]) < 0) return -1;
+            if(unlink(client_pipes[session_id]) < 0) return -1;
+            if(close(fd_serv) < 0) return -1;
         }
 
         if(buf[0] == '3') {
             int flags;
-            n = read(fd_serv, &session_id, sizeof(int));
-            n = read (fd_serv, buf, 40 * sizeof(char));
-            n = read(fd_serv, &flags, sizeof(int));
+            read(fd_serv, &session_id, sizeof(int));
+            read (fd_serv, buf, 40 * sizeof(char));
+            read(fd_serv, &flags, sizeof(int));
             n = tfs_open(buf, flags);
-            n = write(fd_clients[session_id], &n, sizeof(int));
+            write(fd_clients[session_id], &n, sizeof(int));
         }
 
         if(buf[0] == '4') {
             int fhandle;
             n = read(fd_serv, &session_id, sizeof(int));
-            n = read(fd_serv, &fhandle, sizeof(int));
+            read(fd_serv, &fhandle, sizeof(int));
             n = tfs_close(fhandle);
-            n = write(fd_clients[session_id], &n, sizeof(int));
+            write(fd_clients[session_id], &n, sizeof(int));
         }
 
         if(buf[0] == '5') {
             int fhandle;
             size_t len;
-            n = read(fd_serv, &session_id, sizeof(int));
-            n = read(fd_serv, &fhandle, sizeof(int));
-            n = read(fd_serv, &len, sizeof(size_t));
+            read(fd_serv, &session_id, sizeof(int));
+            read(fd_serv, &fhandle, sizeof(int));
+            read(fd_serv, &len, sizeof(size_t));
             char text[len];
             n = read (fd_serv, text, len * sizeof(char));
             n = tfs_write(fd_serv, text, n);
-            n =write(fd_clients[session_id], &n, sizeof(int));
+            write(fd_clients[session_id], &n, sizeof(int));
         }
 
         if(buf[0] == '6'){
             int fhandle;
             size_t len;
-            n = read(fd_serv, &session_id, sizeof(int));
-            n = read(fd_serv, &fhandle, sizeof(int));
-            n = read(fd_serv, &len, sizeof(size_t));
+            read(fd_serv, &session_id, sizeof(int));
+            read(fd_serv, &fhandle, sizeof(int));
+            read(fd_serv, &len, sizeof(size_t));
             char text[len];
             n = tfs_read(fhandle, text, len);
             fhandle = write(fd_clients[session_id], &n, sizeof(int));
-            if (n > 0)
-                n = write(fd_clients[session_id], text, (len * sizeof(char)));
+            if (n > 0) write(fd_clients[session_id], text, (n * sizeof(char)));
         }
 
         if(buf[0] == '7'){
-            n = read(fd_serv, &session_id, sizeof(int));
+            read(fd_serv, &session_id, sizeof(int));
             n = tfs_destroy_after_all_closed();
-            n = write(fd_clients[session_id], &n, sizeof(int));
+            write(fd_clients[session_id], &n, sizeof(int));
         }
     }
 
@@ -121,3 +119,6 @@ int main(int argc, char **argv) {
     unlink(server_pipe);
     return 0;
 }
+
+/*O servidor mantém apenas uma única tabela de ficheiros abertos, que é usada para
+ * servir as chamadas a tfs_open feitas por qualquer cliente.*/
