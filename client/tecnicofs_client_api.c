@@ -12,7 +12,7 @@ char *client_pipe_name;
 
 int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     char op_code = (char) TFS_OP_CODE_MOUNT;
-    int n = 0, result;
+    int n = -1, result;
     // Create client pipe and open it for reading
     unlink(client_pipe_path);
     if(mkfifo(client_pipe_path, 0777) < 0) return -1;
@@ -31,40 +31,100 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
         free(client_pipe_name);
         return -1;
     }
-    while (n == 0) {
-        n = (int)read(fd_serv, &result, sizeof (int));
-        if(n != 0)
-            read(fd_serv, &client_session, sizeof(int));
-    }
+
+    while (n == -1)
+        n = (int)read(fd_client, &result, sizeof (int));
+    n = -1;
+    while (n == -1)
+        n = (int)read(fd_client, &client_session, sizeof (int));
+
     return result;
 }
 
 int tfs_unmount() {
-    /* TODO: Implement this */
-    return -1;
+    char op_code = (char) TFS_OP_CODE_UNMOUNT;
+    int n = -1, result;
+
+    write(fd_serv, &op_code, sizeof(char));
+    write(fd_serv, &client_session, sizeof(int));
+
+    while(n == -1)
+        n = read(fd_client, &result, sizeof(int));
+
+    close(fd_serv);
+    close(fd_client);
+    unlink(client_pipe_name);
+    free(client_pipe_name);
+    return result;
 }
 
 int tfs_open(char const *name, int flags) {
-    /* TODO: Implement this */
-    return -1;
+    char op_code = (char) TFS_OP_CODE_OPEN;
+    int n = -1, result;
+
+    write(fd_serv, &op_code, sizeof(char));
+    write(fd_serv, &client_session, sizeof(int));
+    write(fd_serv, name, FILE_NAME_MAX_SIZE * sizeof(char));
+    write(fd_serv, &flags, sizeof(int));
+
+    while(n == -1)
+        n = read(fd_client, &result, sizeof(int));
+
+    return result;
 }
 
 int tfs_close(int fhandle) {
-    /* TODO: Implement this */
-    return -1;
+    char op_code = (char) TFS_OP_CODE_CLOSE;
+    int n = -1, result;
+
+    write(fd_serv, &op_code, sizeof(char));
+    write(fd_serv, &client_session, sizeof(int));
+    write(fd_serv, &fhandle, sizeof(int));
+
+    while(n == -1)
+        n = read(fd_client, &result, sizeof(int));
+
+    return result;
 }
 
 ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
-    /* TODO: Implement this */
-    return -1;
+    char op_code = (char) TFS_OP_CODE_WRITE;
+    int n = -1;
+    ssize_t result;
+
+    write(fd_serv, &op_code, sizeof(char));
+    write(fd_serv, &client_session, sizeof(int));
+    write(fd_serv, &fhandle, sizeof(int));
+    write(fd_serv, &len, sizeof(size_t));
+    write(fd_serv, buffer, len * sizeof(char));
+
+    while(n == -1)
+        n = read(fd_client, &result, sizeof(ssize_t));
+
+    return result;
 }
 
 ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
+    char op_code = (char) TFS_OP_CODE_READ;
+    int n = -1;
+    ssize_t result;
+
     /* TODO: Implement this */
-    return -1;
+
+    while(n == -1)
+        n = read(fd_client, &result, sizeof(ssize_t));
+
+    return result;
 }
 
 int tfs_shutdown_after_all_closed() {
+    char op_code = (char) TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED;
+    int n = -1, result;
+
     /* TODO: Implement this */
-    return -1;
+
+    while(n == -1)
+        n = read(fd_client, &result, sizeof(int));
+
+    return result;
 }
