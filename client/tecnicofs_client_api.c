@@ -109,11 +109,17 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     int n = -1;
     ssize_t result;
 
-    /* TODO: Implement this */
+    write(fd_serv, &op_code, sizeof(char));
+    write(fd_serv, &client_session, sizeof(int));
+    write(fd_serv, &fhandle, sizeof(int));
+    write(fd_serv, &len, sizeof(size_t));
 
     while(n == -1)
         n = read(fd_client, &result, sizeof(ssize_t));
-
+    n = -1;
+    if(result > 0)
+        while (n == -1)
+            n = read(fd_client, buffer, result * sizeof(char));
     return result;
 }
 
