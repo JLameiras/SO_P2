@@ -43,6 +43,7 @@ int main(int argc, char **argv) {
     if(mkfifo(server_pipe, 0777) < 0) return 1;
     if ((fd_serv = open(server_pipe, O_RDONLY)) < 0) return 1;
     tfs_init();
+
     while(1) {
         n = read(fd_serv, &buf, sizeof(char));
         if (n == 0) break;

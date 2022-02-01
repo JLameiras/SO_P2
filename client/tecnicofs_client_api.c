@@ -1,10 +1,11 @@
 #include "tecnicofs_client_api.h"
 #include <errno.h>
 #include <fcntl.h>
-#include <malloc.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 int client_session = -1; // Is this how we are supposed to store the client's id?
 int fd_client, fd_serv;
@@ -125,12 +126,14 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
 int tfs_shutdown_after_all_closed() {
     char op_code = (char) TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED;
-    int n = -1, result;
+    int n = -1;
+    ssize_t result;
 
-    /* TODO: Implement this */
+    write(fd_serv, &op_code, sizeof(char));
+    write(fd_serv, &client_session, sizeof(int));
 
     while(n == -1)
-        n = read(fd_client, &result, sizeof(int));
+        n = read(fd_client, &result, sizeof(ssize_t));
 
     return result;
 }
