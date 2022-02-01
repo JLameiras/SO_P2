@@ -19,4 +19,8 @@ enum {
     TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED = 7
 };
 
+/* Size constants */
+#define CLIENT_PIPE_NAME_SIZE 40
+#define FILE_NAME_MAX_SIZE 40
+
 #endif /* COMMON_H */
