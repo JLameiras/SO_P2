@@ -25,7 +25,7 @@ typedef struct myBuffer {
     char op_code;
     int session_id;
     char name[FILE_NAME_MAX_SIZE];
-    char *extra;
+    char* extra;
     int flags;
     int fhandle;
     size_t len;
@@ -41,7 +41,7 @@ myBuffer buffer[S];
 
 void * worker_thread(void* arg) {
     myBuffer mybuffer = *(myBuffer *)arg;
-    int n, session_id = mybuffer.session_id;
+    int session_id = mybuffer.session_id;
     while(running == 1){
         if (pthread_mutex_lock(&buffer[session_id].lock) != 0) continue;
 
@@ -151,7 +151,8 @@ int main(int argc, char **argv) {
             read(fd_serv, &buffer[session].fhandle, sizeof(int));
             read(fd_serv, &buffer[session].len, sizeof(size_t));
             buffer[session].extra = (char *)malloc(buffer[session].len * sizeof(char));
-            buffer[session].len = read (fd_serv, &buffer[session].extra, buffer[session].len * sizeof(char));
+            buffer[session].len = read(fd_serv, buffer[session].extra, buffer[session].len * sizeof(char));
+
         }
         if(buf == (char)TFS_OP_CODE_READ) {
             read(fd_serv, &buffer[session].fhandle, sizeof(int));
@@ -214,10 +215,8 @@ int server_tfs_unmount(int session_id) {
 
 
 int server_tfs_open(int session_id) {
-    char buf[FILE_NAME_MAX_SIZE];
     int flags = buffer[session_id].flags, result;
-    strncpy(buf, buffer[session_id].name, 40 * sizeof(char));
-    result = tfs_open(buf, flags);
+    result = tfs_open(buffer[session_id].name, flags);
     write(fd_clients[session_id], &result, sizeof(int));
     buffer[session_id].op_code = -1;
     return result;
@@ -235,7 +234,7 @@ int server_tfs_close(int session_id) {
 int server_tfs_write(int session_id) {
     int fhandle = buffer[session_id].fhandle;
     size_t len = buffer[session_id].len;
-    ssize_t result;
+    ssize_t result = 0;
     result = tfs_write(fhandle, buffer[session_id].extra, len * sizeof(char));
     write(fd_clients[session_id], &result, sizeof(ssize_t));
     free(buffer[session_id].extra);

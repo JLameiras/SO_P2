@@ -196,14 +196,15 @@ static ssize_t _tfs_write_unsynchronized(int fhandle, void const *buffer,
             inode->i_size = file->of_offset;
         }
     }
-
     return (ssize_t)to_write;
 }
 
 ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     if (pthread_mutex_lock(&single_global_lock) != 0)
         return -1;
+
     ssize_t ret = _tfs_write_unsynchronized(fhandle, buffer, to_write);
+
     if (pthread_mutex_unlock(&single_global_lock) != 0)
         return -1;
 
