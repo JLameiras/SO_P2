@@ -35,7 +35,7 @@ typedef struct myBuffer {
 
 
 char *client_pipes[S];
-int fd_clients[S];
+int fd_clients[S], running = 1;
 myBuffer buffer[S];
 
 
@@ -43,7 +43,7 @@ void * worker_thread(void* arg) {
     myBuffer mybuffer = *(myBuffer *)arg;
     int n, session_id = mybuffer.session_id;
 
-    while(1){
+    while(running == 1){
         if (pthread_mutex_lock(&buffer[session_id].lock) != 0) continue;
 
         while(buffer[session_id].op_code == -1)
@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
     if ((fd_serv = open(server_pipe, O_RDONLY)) < 0) return 1;
     tfs_init();
 
-    while(1) {
+    while(running == 1) {
         n = read(fd_serv, &buf, sizeof(char));
         if (n == 0)
             break;
@@ -157,8 +157,7 @@ int main(int argc, char **argv) {
             read(fd_serv, &buffer[session].fhandle, sizeof(int));
             read(fd_serv, &buffer[session].len, sizeof(size_t));
         }
-        if(buf == (char)TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED) // Desligar o servidor depois de todos os clientes fecharem os ficheiros
-            if(server_tfs_shutdown_after_all_closed(session) == 0) break;
+        if(buf == (char)TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED) {}
 
         if(buf != TFS_OP_CODE_MOUNT) // Unlock previously locked buffer's mutex
             pthread_mutex_unlock(&buffer[session].lock);
@@ -189,7 +188,6 @@ void free_client_id_pipe(int session_id){
 
 
 int server_tfs_mount(int session_id) {
-    char buf[40];
     int result = 0;
     client_pipes[session_id] = (char *)malloc(CLIENT_PIPE_NAME_SIZE * sizeof(char));
     if(client_pipes[session_id] == NULL) return -1;
@@ -263,6 +261,7 @@ int server_tfs_shutdown_after_all_closed(int session_id) {
     int result;
     result = tfs_destroy_after_all_closed();
     write(fd_clients[session_id], &result, sizeof(int));
+    running = 0;
     for(int i = 0; i < S; i++) {
         if (fd_clients[i] != -1 )
             free_client_id_pipe(i);
