@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
         n = read(fd_serv, &buf, sizeof(char));
         if (n == 0)
             break;
-        if (buf != TFS_OP_CODE_MOUNT){
+        if (buf != (char)TFS_OP_CODE_MOUNT){
             read(fd_serv, &session, sizeof(int));
             pthread_mutex_lock(&buffer[session].lock); // Lock mutex to make changes to buffer
             buffer[session].session_id = session;
