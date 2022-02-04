@@ -34,9 +34,8 @@ int main(int argc, char **argv) {
 
     f = tfs_open(path, 0);
     assert(f != -1);
-    puts("Before");
-    r = tfs_read(f, buffer, sizeof(buffer) - 1);
 
+    r = tfs_read(f, buffer, sizeof(buffer) - 1);
     assert(r == strlen(str));
 
     assert(strcmp(buffer, str) == 0);
