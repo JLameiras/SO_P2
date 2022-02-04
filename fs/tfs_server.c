@@ -1,5 +1,6 @@
 #include "operations.h"
 #include <fcntl.h>
+#include <pthread.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -20,6 +21,30 @@ int server_tfs_read(int fd_serv, int fd_clients[]);
 int server_tfs_shutdown_after_all_closed(int fd_serv, int fd_clients[], char *client_pipes[]);
 
 
+typedef struct myBuffer {
+    char op_code;
+    int session;
+    char name[FILE_NAME_MAX_SIZE];
+    int flags;
+    int fhandle;
+    size_t len;
+    pthread_mutex_t lock;
+} myBuffer;
+
+
+char *client_pipe_names[S];
+int fd_clients[S];
+myBuffer buffer[S];
+char *extra_buffer[S];
+
+
+void * worker_thread(void* arg) {
+    myBuffer *buf = arg;
+
+    return NULL;
+}
+
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         printf("Please specify the pathname of the server's pipe.\n");
@@ -29,14 +54,19 @@ int main(int argc, char **argv) {
     char *server_pipe = argv[1];
     printf("Starting TecnicoFS server with pipe called %s\n", server_pipe);
 
-    char *client_pipe_names[S];
     int fd_serv;
-    int fd_clients[S];
     char buf;
-    int n;
+    int n, session;
+    pthread_t *sessions[S];
 
-    for(int i = 0; i < S; i++)
+    for(int i = 0; i < S; i++) {
         fd_clients[i] = -1;
+        buffer[i].op_code = -1; // Initially no tasks for worker threads;
+        buffer[i].session = i;
+        pthread_mutex_init(&buffer[i].lock, NULL);
+        pthread_create(sessions[i], NULL, worker_thread, &buffer[i]);
+    }
+
     unlink(server_pipe);
 
     //Named pipe used by client processes to send requests to the server
@@ -47,7 +77,9 @@ int main(int argc, char **argv) {
     while(1) {
         n = read(fd_serv, &buf, sizeof(char));
         if (n == 0) break;
-
+        read(fd_serv, &session, sizeof (int));
+        buffer[session].op_code = buf;
+        /*
         if(buf == (char)TFS_OP_CODE_MOUNT)
             server_tfs_mount(fd_serv, fd_clients, client_pipe_names);
         if(buf == (char)TFS_OP_CODE_UNMOUNT)
@@ -62,6 +94,7 @@ int main(int argc, char **argv) {
             server_tfs_read(fd_serv, fd_clients);
         if(buf == (char)TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED) // Desligar o servidor depois de todos os clientes fecharem os ficheiros
             if(server_tfs_shutdown_after_all_closed(fd_serv, fd_clients, client_pipe_names) == 0) break;
+        */
     }
 
     close(fd_serv);
