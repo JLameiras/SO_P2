@@ -30,6 +30,7 @@ typedef struct myBuffer {
     int fhandle;
     size_t len;
     pthread_mutex_t lock;
+    pthread_cond_t cond;
 } myBuffer;
 
 
@@ -39,8 +40,40 @@ myBuffer buffer[S];
 
 
 void * worker_thread(void* arg) {
-    myBuffer *buf = arg;
+    myBuffer mybuffer = *(myBuffer *)arg;
+    int n, session_id = mybuffer.session_id;
 
+    while(1){
+        if (pthread_mutex_lock(&buffer[session_id].lock) != 0) continue;
+
+        while(buffer[session_id].op_code == -1)
+            pthread_cond_wait(&buffer[session_id].cond, &buffer[session_id].lock);
+
+        if (buffer[session_id].op_code == (char)TFS_OP_CODE_MOUNT)
+            server_tfs_mount(session_id);
+
+        if (buffer[session_id].op_code == (char)TFS_OP_CODE_UNMOUNT)
+            server_tfs_unmount(session_id);
+
+        if (buffer[session_id].op_code == (char)TFS_OP_CODE_OPEN)
+            server_tfs_open(session_id);
+
+        if (buffer[session_id].op_code == (char)TFS_OP_CODE_CLOSE)
+            server_tfs_close(session_id);
+
+        if (buffer[session_id].op_code == (char)TFS_OP_CODE_WRITE)
+            server_tfs_write(session_id);
+
+        if(buffer[session_id].op_code == (char)TFS_OP_CODE_READ)
+            server_tfs_read(session_id);
+
+        if (buffer[session_id].op_code == (char)TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED) {
+            server_tfs_shutdown_after_all_closed(session_id);
+            break;
+        }
+
+        if (pthread_mutex_unlock(&buffer[session_id].lock) != 0) continue;
+    }
     return NULL;
 }
 
@@ -64,6 +97,7 @@ int main(int argc, char **argv) {
         buffer[i].op_code = -1; // Initially no tasks for worker threads;
         buffer[i].session_id = i;
         pthread_mutex_init(&buffer[i].lock, NULL);
+        pthread_cond_init(&buffer[i].cond, NULL);
         pthread_create(sessions[i], NULL, worker_thread, &buffer[i]);
     }
 
@@ -81,8 +115,8 @@ int main(int argc, char **argv) {
         if (buf != (char)TFS_OP_CODE_MOUNT){
             read(fd_serv, &session, sizeof(int));
             pthread_mutex_lock(&buffer[session].lock); // Lock mutex to make changes to buffer
-            buffer[session].session_id = session;
             buffer[session].op_code = buf;
+            pthread_cond_signal(&buffer[session].cond);
         }
 
         if (buf == (char)TFS_OP_CODE_MOUNT){
@@ -96,6 +130,7 @@ int main(int argc, char **argv) {
             }
             pthread_mutex_lock(&buffer[session].lock);
             buffer[session].op_code = buf;
+            pthread_cond_signal(&buffer[session].cond);
             ssize_t pipe_name_size = read(fd_serv, &buffer[session].name, (CLIENT_PIPE_NAME_SIZE * sizeof(char)));
             for (ssize_t i = pipe_name_size; i < CLIENT_PIPE_NAME_SIZE;
                  i++) // Fill in the rest of the name
@@ -150,7 +185,6 @@ void free_client_id_pipe(int session_id){
     free(client_pipes[session_id]);
     close(fd_clients[session_id]);
     fd_clients[session_id] = -1;
-    buffer[session_id].session_id = -1;
 }
 
 
@@ -233,6 +267,7 @@ int server_tfs_shutdown_after_all_closed(int session_id) {
         if (fd_clients[i] != -1 )
             free_client_id_pipe(i);
         pthread_mutex_destroy(&buffer[i].lock);
+        pthread_cond_destroy(&buffer[i].cond);
     }
     buffer[session_id].op_code = -1;
     return result;
