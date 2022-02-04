@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
     }
 
     tfs_init();
-    puts("Got here");
+
     while(running == 1) {
         n = read(fd_serv, &buf, sizeof(char));
         if (n == 0)
@@ -214,9 +214,9 @@ int server_tfs_unmount(int session_id) {
 
 
 int server_tfs_open(int session_id) {
-    puts("open");
     char buf[FILE_NAME_MAX_SIZE];
     int flags = buffer[session_id].flags, result;
+    strncpy(buf, buffer[session_id].name, 40 * sizeof(char));
     result = tfs_open(buf, flags);
     write(fd_clients[session_id], &result, sizeof(int));
     buffer[session_id].op_code = -1;
@@ -233,7 +233,7 @@ int server_tfs_close(int session_id) {
 
 
 int server_tfs_write(int session_id) {
-    int fhandle = buffer[session_id].session_id;
+    int fhandle = buffer[session_id].fhandle;
     size_t len = buffer[session_id].len;
     ssize_t result;
     result = tfs_write(fhandle, buffer[session_id].extra, len * sizeof(char));
