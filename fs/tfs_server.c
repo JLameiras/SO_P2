@@ -150,30 +150,34 @@ void free_client_id_pipe(int session_id){
     free(client_pipes[session_id]);
     close(fd_clients[session_id]);
     fd_clients[session_id] = -1;
-    pthread_mutex_destroy(&buffer[session_id].lock);
+    buffer[session_id].session_id = -1;
 }
 
 
 int server_tfs_mount(int session_id) {
     char buf[40];
+    int result = 0;
     client_pipes[session_id] = (char *)malloc(CLIENT_PIPE_NAME_SIZE * sizeof(char));
     if(client_pipes[session_id] == NULL) return -1;
     strncpy(client_pipes[session_id], buffer[session_id].name, CLIENT_PIPE_NAME_SIZE);
     if ((fd_clients[session_id] = open(client_pipes[session_id], O_WRONLY)) < 0) {
+        result = -1;
         buffer[session_id].op_code = -1;
-        return -1;
+        return result;
     }
-    write(fd_clients[session_id], &valid_mount, sizeof(int)); // return 0 to client
+    write(fd_clients[session_id], &result, sizeof(int)); // return 0 to client
     write(fd_clients[session_id], &session_id, sizeof(int)); // return session id to client
     buffer[session_id].op_code = -1;
-    return 0;
+    return result;
 }
 
 
 int server_tfs_unmount(int session_id) {
+    int result = 0;
+    write(fd_clients[session_id], &result, sizeof(int));
     free_client_id_pipe(session_id);
     buffer[session_id].op_code = -1;
-    return 0;
+    return result;
 }
 
 
@@ -228,6 +232,7 @@ int server_tfs_shutdown_after_all_closed(int session_id) {
     for(int i = 0; i < S; i++) {
         if (fd_clients[i] != -1 )
             free_client_id_pipe(i);
+        pthread_mutex_destroy(&buffer[i].lock);
     }
     buffer[session_id].op_code = -1;
     return result;
