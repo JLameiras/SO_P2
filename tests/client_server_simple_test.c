@@ -38,6 +38,7 @@ int main(int argc, char **argv) {
     r = tfs_read(f, buffer, sizeof(buffer) - 1);
     assert(r == strlen(str));
 
+    buffer[r] = '\0';
     assert(strcmp(buffer, str) == 0);
 
     assert(tfs_close(f) != -1);
