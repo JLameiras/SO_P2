@@ -10,21 +10,22 @@
 #endif
 
 
-int minimum_available_session_id(int fd_clients[]);
-void free_client_id_pipe(char *client_pipes[S], int fd_clients[], int session_id);
-int server_tfs_mount(int fd_serv, int fd_clients[], char *client_pipes[]);
-int server_tfs_unmount(int fd_serv, int fd_clients[], char *client_pipes[]);
-int server_tfs_open(int fd_serv, int fd_clients[]);
-int server_tfs_close(int fd_serv, int fd_clients[]);
-int server_tfs_write(int fd_serv, int fd_clients[]);
-int server_tfs_read(int fd_serv, int fd_clients[]);
-int server_tfs_shutdown_after_all_closed(int fd_serv, int fd_clients[], char *client_pipes[]);
+int minimum_available_session_id();
+void free_client_id_pipe(int session_id);
+int server_tfs_mount(int session_id);
+int server_tfs_unmount(int session_id);
+int server_tfs_open(int session_id);
+int server_tfs_close(int session_id);
+int server_tfs_write(int session_id);
+int server_tfs_read(int session_id);
+int server_tfs_shutdown_after_all_closed(int session_id);
 
 
 typedef struct myBuffer {
     char op_code;
     int session_id;
     char name[FILE_NAME_MAX_SIZE];
+    char *extra;
     int flags;
     int fhandle;
     size_t len;
@@ -35,7 +36,6 @@ typedef struct myBuffer {
 char *client_pipes[S];
 int fd_clients[S];
 myBuffer buffer[S];
-char *extra_buffer[S];
 
 
 void * worker_thread(void* arg) {
@@ -78,18 +78,29 @@ int main(int argc, char **argv) {
         n = read(fd_serv, &buf, sizeof(char));
         if (n == 0)
             break;
-        read(fd_serv, &session, sizeof(int));
-        buffer[session].op_code = buf;
         if (buf != TFS_OP_CODE_MOUNT){
+            read(fd_serv, &session, sizeof(int));
+            pthread_mutex_lock(&buffer[session].lock); // Lock mutex to make changes to buffer
             buffer[session].session_id = session;
+            buffer[session].op_code = buf;
         }
 
         if (buf == (char)TFS_OP_CODE_MOUNT){
-            if((session = minimum_available_session_id(fd_clients)) == -1) continue;
+            if((session = minimum_available_session_id()) == -1) {
+                char pipe_name[CLIENT_PIPE_NAME_SIZE];
+                read(fd_serv, &pipe_name, (CLIENT_PIPE_NAME_SIZE * sizeof(char)));
+                int fd = open(pipe_name, O_WRONLY); // Open client pipe
+                write(fd, &session, sizeof(int)); //return -1 to client
+                close(fd); // Close client pipe
+                continue;
+            }
+            pthread_mutex_lock(&buffer[session].lock);
+            buffer[session].op_code = buf;
             ssize_t pipe_name_size = read(fd_serv, &buffer[session].name, (CLIENT_PIPE_NAME_SIZE * sizeof(char)));
             for (ssize_t i = pipe_name_size; i < CLIENT_PIPE_NAME_SIZE;
                  i++) // Fill in the rest of the name
                 buffer[session].name[i] = '\0';
+            pthread_mutex_unlock(&buffer[session].lock);
         }
 
         if (buf == (char)TFS_OP_CODE_UNMOUNT){}
@@ -104,15 +115,18 @@ int main(int argc, char **argv) {
         if (buf == (char)TFS_OP_CODE_WRITE){
             read(fd_serv, &buffer[session].fhandle, sizeof(int));
             read(fd_serv, &buffer[session].len, sizeof(size_t));
-            extra_buffer[session] = (char *)malloc(buffer[session].len * sizeof(char));
-            read (fd_serv, &extra_buffer[session], buffer[session].len * sizeof(char));
+            buffer[session].extra = (char *)malloc(buffer[session].len * sizeof(char));
+            buffer[session].len = read (fd_serv, &buffer[session].extra, buffer[session].len * sizeof(char));
         }
         if(buf == (char)TFS_OP_CODE_READ) {
             read(fd_serv, &buffer[session].fhandle, sizeof(int));
             read(fd_serv, &buffer[session].len, sizeof(size_t));
         }
         if(buf == (char)TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED) // Desligar o servidor depois de todos os clientes fecharem os ficheiros
-            if(server_tfs_shutdown_after_all_closed(fd_serv, fd_clients, client_pipes) == 0) break;
+            if(server_tfs_shutdown_after_all_closed(session) == 0) break;
+
+        if(buf != TFS_OP_CODE_MOUNT) // Unlock previously locked buffer's mutex
+            pthread_mutex_unlock(&buffer[session].lock);
     }
 
     close(fd_serv);
@@ -125,46 +139,40 @@ int main(int argc, char **argv) {
  * servir as chamadas a tfs_open feitas por qualquer cliente.*/
 
 
-int minimum_available_session_id(int fd_clients[]){
+int minimum_available_session_id(){
     for(int i = 0; i < S; i++)
         if(fd_clients[i] == -1) return i;
     return -1;
 }
 
 
-void free_client_id_pipe(char *client_pipes[S], int fd_clients[], int session_id){
+void free_client_id_pipe(int session_id){
     free(client_pipes[session_id]);
     close(fd_clients[session_id]);
     fd_clients[session_id] = -1;
-    pthread_mutex_destroy(&buffer[session_id].mutex);
+    pthread_mutex_destroy(&buffer[session_id].lock);
 }
 
 
 int server_tfs_mount(int session_id) {
     char buf[40];
-    int valid_mount = 0;
-    valid_mount = session_id == -1 ? -1 : 0;
-    if(valid_mount == 0) {
-        client_pipes[session_id] = (char *)malloc(CLIENT_PIPE_NAME_SIZE * sizeof(char));
-        if(client_pipes[session_id] == NULL) return -1;
-        strncpy(client_pipes[session_id], buffer.name, CLIENT_PIPE_NAME_SIZE);
-        if ((fd_clients[session_id] = open(client_pipes[session_id], O_WRONLY)) < 0)
-            return -1;
-        write(fd_clients[session_id], &valid_mount, sizeof(int)); // return 0 to client
-        write(fd_clients[session_id], &session_id, sizeof(int)); // return session id to client
-        return 0;
-    } else {
-        // In this case client session isn't created so pipe name is not to be stored
-        int fd = open(buf, O_WRONLY);
-        write(fd_clients[session_id], &valid_mount, sizeof(int)); //return -1 to client
-        close(fd);
+    client_pipes[session_id] = (char *)malloc(CLIENT_PIPE_NAME_SIZE * sizeof(char));
+    if(client_pipes[session_id] == NULL) return -1;
+    strncpy(client_pipes[session_id], buffer[session_id].name, CLIENT_PIPE_NAME_SIZE);
+    if ((fd_clients[session_id] = open(client_pipes[session_id], O_WRONLY)) < 0) {
+        buffer[session_id].op_code = -1;
         return -1;
     }
+    write(fd_clients[session_id], &valid_mount, sizeof(int)); // return 0 to client
+    write(fd_clients[session_id], &session_id, sizeof(int)); // return session id to client
+    buffer[session_id].op_code = -1;
+    return 0;
 }
 
 
 int server_tfs_unmount(int session_id) {
-    free_client_id_pipe(client_pipes, fd_clients, session_id);
+    free_client_id_pipe(session_id);
+    buffer[session_id].op_code = -1;
     return 0;
 }
 
@@ -174,6 +182,7 @@ int server_tfs_open(int session_id) {
     int flags, result;
     result = tfs_open(buf, flags);
     write(fd_clients[session_id], &result, sizeof(int));
+    buffer[session_id].op_code = -1;
     return result;
 }
 
@@ -181,50 +190,45 @@ int server_tfs_open(int session_id) {
 int server_tfs_close(int session_id) {
     int result = tfs_close(buffer[session_id].fhandle);
     write(fd_clients[session_id], &result, sizeof(int));
+    buffer[session_id].op_code = -1;
     return result;
 }
 
 
 int server_tfs_write(int session_id) {
-    int session_id, fhandle;
-    size_t len;
+    int fhandle = buffer[session_id].session_id;
+    size_t len = buffer[session_id].len;
     ssize_t result;
-    read(fd_serv, &session_id, sizeof(int));
-    read(fd_serv, &fhandle, sizeof(int));
-    read(fd_serv, &len, sizeof(size_t));
-    char *text = (char *)malloc(len * sizeof(char));
-    len = read (fd_serv, text, len * sizeof(char));
-    result = tfs_write(fhandle, text, len * sizeof(char));
+    result = tfs_write(fhandle, buffer[session_id].extra, len * sizeof(char));
     write(fd_clients[session_id], &result, sizeof(ssize_t));
-    free(text);
+    free(buffer[session_id].extra);
+    buffer[session_id].op_code = -1;
     return result < 0 ? -1 : 0;
 }
 
 
-int server_tfs_read(int fd_serv, int fd_clients[]) {
-    int session_id, fhandle;
-    size_t len;
+int server_tfs_read(int session_id) {
+    int fhandle = buffer[session_id].fhandle;
+    size_t len = buffer[session_id].len;
     ssize_t result;
-    read(fd_serv, &session_id, sizeof(int));
-    read(fd_serv, &fhandle, sizeof(int));
-    read(fd_serv, &len, sizeof(size_t));
-    char *text = (char *)malloc(len * sizeof(char));
-    result = tfs_read(fhandle, text, len);
+    buffer[session_id].extra = (char *)malloc(len * sizeof(char));
+    result = tfs_read(fhandle, buffer[session_id].extra, len);
     write(fd_clients[session_id], &result, sizeof(ssize_t));
-    if (result > 0) write(fd_clients[session_id], text, (result * sizeof(char)));
-    free(text);
+    if (result > 0) write(fd_clients[session_id], buffer[session_id].extra, (result * sizeof(char)));
+    free(buffer[session_id].extra);
+    buffer[session_id].op_code = -1;
     return result < 0 ? -1 : 0;
 }
 
 
-int server_tfs_shutdown_after_all_closed(int fd_serv, int fd_clients[], char *client_pipes[]) {
-    int session_id, result;
-    read(fd_serv, &session_id, sizeof(int));
+int server_tfs_shutdown_after_all_closed(int session_id) {
+    int result;
     result = tfs_destroy_after_all_closed();
     write(fd_clients[session_id], &result, sizeof(int));
     for(int i = 0; i < S; i++) {
         if (fd_clients[i] != -1 )
-            free_client_id_pipe(client_pipes, fd_clients, i);
+            free_client_id_pipe(i);
     }
+    buffer[session_id].op_code = -1;
     return result;
 }
