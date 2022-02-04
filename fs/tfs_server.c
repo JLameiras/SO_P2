@@ -42,7 +42,6 @@ myBuffer buffer[S];
 void * worker_thread(void* arg) {
     myBuffer mybuffer = *(myBuffer *)arg;
     int n, session_id = mybuffer.session_id;
-
     while(running == 1){
         if (pthread_mutex_lock(&buffer[session_id].lock) != 0) continue;
 
@@ -83,14 +82,20 @@ int main(int argc, char **argv) {
         printf("Please specify the pathname of the server's pipe.\n");
         return 1;
     }
-
+    int fd_serv;
     char *server_pipe = argv[1];
     printf("Starting TecnicoFS server with pipe called %s\n", server_pipe);
+    //Named pipe used by client processes to send requests to the server
 
-    int fd_serv;
+    unlink(server_pipe);
+    if(mkfifo(server_pipe, 0777) < 0) return 1;
+    if ((fd_serv = open(server_pipe, O_RDONLY)) < 0) return 1;
+
     char buf;
     int n, session;
     pthread_t *sessions[S];
+
+
 
     for(int i = 0; i < S; i++) {
         fd_clients[i] = -1;
@@ -98,16 +103,11 @@ int main(int argc, char **argv) {
         buffer[i].session_id = i;
         pthread_mutex_init(&buffer[i].lock, NULL);
         pthread_cond_init(&buffer[i].cond, NULL);
-        pthread_create(sessions[i], NULL, worker_thread, &buffer[i]);
+        pthread_create(&sessions[i], NULL, worker_thread, &buffer[i]);
     }
 
-    unlink(server_pipe);
-
-    //Named pipe used by client processes to send requests to the server
-    if(mkfifo(server_pipe, 0777) < 0) return 1;
-    if ((fd_serv = open(server_pipe, O_RDONLY)) < 0) return 1;
     tfs_init();
-
+    puts("Got here");
     while(running == 1) {
         n = read(fd_serv, &buf, sizeof(char));
         if (n == 0)
@@ -214,8 +214,9 @@ int server_tfs_unmount(int session_id) {
 
 
 int server_tfs_open(int session_id) {
+    puts("open");
     char buf[FILE_NAME_MAX_SIZE];
-    int flags, result;
+    int flags = buffer[session_id].flags, result;
     result = tfs_open(buf, flags);
     write(fd_clients[session_id], &result, sizeof(int));
     buffer[session_id].op_code = -1;

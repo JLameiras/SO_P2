@@ -1,5 +1,6 @@
 #include "client/tecnicofs_client_api.h"
 #include <assert.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 

@@ -19,7 +19,9 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     if(mkfifo(client_pipe_path, 0777) < 0) return -1;
     client_pipe_name = (char *) malloc(CLIENT_PIPE_NAME_SIZE * sizeof(char));
     strncpy(client_pipe_name, client_pipe_path, 40);
+    printf("Open server pipe named: %s\n", server_pipe_path);
     if((fd_serv = open(server_pipe_path, O_WRONLY)) < 0) {
+        puts("fail");
         unlink(client_pipe_path);
         free(client_pipe_name);
         return -1;
